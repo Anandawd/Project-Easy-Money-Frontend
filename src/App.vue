@@ -1,5 +1,11 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+// import FinanceApp from '@/views/FinanceApp.vue'
+// import Finance from '@/views/Finance.vue'
+import Dashboard from '@/views/Dashboard.vue'
+</script>
 
-<template><h1>Hello</h1></template>
-
-<style scoped></style>
+<template>
+  <!-- <FinanceApp /> -->
+  <!-- <Finance /> -->
+  <Dashboard />
+</template>

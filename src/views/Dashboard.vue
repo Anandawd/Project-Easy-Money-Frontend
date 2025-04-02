@@ -1,239 +1,20 @@
 <script setup lang="ts">
-import { categoryService, transactionService, walletService } from '@/services'
-import { computed, onMounted, ref } from 'vue'
-import type { Category, NewTransaction, Transaction, Wallet } from '../types'
+import { useCategoryStore, useTransactionsStore, useWalletStore } from '@/stores'
+import { onMounted } from 'vue'
 
-// State
-const transactions = ref<Transaction[]>([])
-const categories = ref<Category[]>([])
-const wallets = ref<Wallet[]>([])
-const isLoading = ref<boolean>(false)
-const errorMessage = ref<string>('')
-const successMessage = ref<string>('')
+const transactionStore = useTransactionsStore()
+const categoryStore = useCategoryStore()
+const walletStore = useWalletStore()
 
-// Form state
-const newTransaction = ref<Partial<NewTransaction>>({
-  user_id: 1,
-  name: '',
-  amount: 0,
-  type: '',
-  category_id: 0,
-  date: new Date().toISOString().slice(0, 10),
-  wallet_id: 0,
-  note: '',
-})
-
-// Load data
-const loadTransactions = async (): Promise<void> => {
-  isLoading.value = true
-  errorMessage.value = ''
-  try {
-    transactions.value = await transactionService.getAll()
-    console.log('loadTransaction: ', transactions.value)
-  } catch (error) {
-    console.error('Error loading transactions:', error)
-    errorMessage.value = 'Gagal memuat data transaksi'
-  } finally {
-    isLoading.value = false
-  }
-}
-
-const loadCategories = async (): Promise<void> => {
-  try {
-    categories.value = await categoryService.getAll()
-  } catch (error) {
-    console.error('Error loading categories:', error)
-    errorMessage.value = 'Gagal memuat data kategori'
-  }
-}
-
-const loadWallets = async (): Promise<void> => {
-  try {
-    wallets.value = await walletService.getAll()
-  } catch (error) {
-    console.error('Error loading wallets:', error)
-    errorMessage.value = 'Gagal memuat data dompet'
-  }
-}
-
-// Add transaction
-const addTransaction = async (): Promise<void> => {
-  isLoading.value = true
-  errorMessage.value = ''
-
-  try {
-    if (
-      !newTransaction.value.name ||
-      !newTransaction.value.amount ||
-      !newTransaction.value.type ||
-      !newTransaction.value.category_id ||
-      !newTransaction.value.wallet_id ||
-      !newTransaction.value.date
-    ) {
-      errorMessage.value = 'Semua field wajib diisi'
-      isLoading.value = false
-      return
-    }
-
-    // Convert form value to the backend expected format
-    const transactionData: NewTransaction = {
-      user_id: newTransaction.value.user_id || 1,
-      name: newTransaction.value.name || '',
-      amount: Number(newTransaction.value.amount),
-      type: newTransaction.value.type || '',
-      category_id: Number(newTransaction.value.category_id),
-      date: new Date(newTransaction.value.date || '').toISOString(),
-      wallet_id: Number(newTransaction.value.wallet_id),
-      note: newTransaction.value.note,
-    }
-
-    const createdTransaction = await transactionService.create(transactionData)
-    transactions.value.push(createdTransaction)
-
-    // Reset form
-    newTransaction.value = {
-      user_id: 1,
-      name: '',
-      amount: 0,
-      type: '',
-      category_id: 0,
-      date: new Date().toISOString().slice(0, 10),
-      wallet_id: 0,
-      note: '',
-    }
-
-    successMessage.value = 'Transaksi berhasil ditambahkan'
-    setTimeout(() => {
-      successMessage.value = ''
-    }, 3000)
-  } catch (error: any) {
-    console.error('Error adding transaction:', error)
-    errorMessage.value = error.response?.data?.message || 'Gagal menambahkan transaksi'
-  } finally {
-    isLoading.value = false
-  }
-}
-
-// Edit transaction
-const editTransaction = async (id: number, index: number): Promise<void> => {
-  try {
-    // Get current values for the transaction
-    const currentTransaction = transactions.value[index]
-
-    // Collect updated values using prompts (in a real app, you'd use a modal form)
-    const updatedName = prompt('Masukkan nama transaksi baru:', currentTransaction.name)
-
-    if (!updatedName) return
-
-    const updatedAmount = prompt('Masukkan jumlah baru:', String(currentTransaction.amount))
-
-    if (!updatedAmount) return
-
-    const updatedDate = prompt(
-      'Masukkan tanggal baru (YYYY-MM-DD):',
-      new Date(currentTransaction.date).toISOString().slice(0, 10),
-    )
-
-    console.log('updatedDate: ', updatedDate)
-
-    if (!updatedDate) return
-
-    const updatedType = prompt('Masukkan jenis baru:', currentTransaction.type)
-    if (!updatedType) return
-
-    const updatedCategoryId = prompt(
-      'Masukkan ID kategori baru:',
-      String(currentTransaction.category_id),
-    )
-    if (!updatedCategoryId) return
-
-    const updatedWalletId = prompt('Masukkan ID dompet baru:', String(currentTransaction.wallet_id))
-    if (!updatedWalletId) return
-
-    const updatedNote = prompt('Masukkan catatan baru:', currentTransaction.note || '')
-
-    const formattedDate = new Date(updatedDate).toISOString()
-    console.log('formattedDate: ', formattedDate)
-
-    const updatedTransaction: Partial<NewTransaction> = {
-      name: updatedName,
-      amount: parseFloat(updatedAmount),
-      date: formattedDate,
-      type: updatedType as 'Pemasukan' | 'Pengeluaran',
-      category_id: parseInt(updatedCategoryId),
-      wallet_id: parseInt(updatedWalletId),
-      note: updatedNote || '',
-      user_id: currentTransaction.user_id,
-    }
-
-    // Send PUT request to update in backend
-    const response = await transactionService.update(id, updatedTransaction)
-
-    // Update local state with the response data
-    transactions.value[index] = response
-    successMessage.value = 'Transaksi berhasil diperbarui'
-
-    // Clear success message after 3 seconds
-    setTimeout(() => {
-      successMessage.value = ''
-    }, 3000)
-  } catch (error: any) {
-    console.error('Error updating transaction:', error)
-    errorMessage.value = error.response?.data?.message || 'Gagal memperbarui transaksi'
-  }
-}
-
-// Delete transaction
-const deleteTransaction = async (id: number, index: number): Promise<void> => {
-  if (!confirm('Apakah Anda yakin ingin menghapus transaksi ini?')) {
-    return
-  }
-
-  try {
-    // Send DELETE request to backend
-    await transactionService.delete(id)
-
-    // Remove from local state
-    transactions.value.splice(index, 1)
-    successMessage.value = 'Transaksi berhasil dihapus'
-
-    // Clear success message after 3 seconds
-    setTimeout(() => {
-      successMessage.value = ''
-    }, 3000)
-  } catch (error: any) {
-    console.error('Error deleting transaction:', error)
-    errorMessage.value = error.response?.data?.message || 'Gagal menghapus transaksi'
-  }
-}
-
-// Calculated properties
-const totalIncome = computed((): number => {
-  return transactions.value
-    .filter((transaction) => transaction.type === 'Pemasukan')
-    .reduce((total, transaction) => total + parseFloat(String(transaction.amount)), 0)
-})
-
-const totalExpenses = computed((): number => {
-  return transactions.value
-    .filter((transaction) => transaction.type === 'Pengeluaran')
-    .reduce((total, transaction) => total + parseFloat(String(transaction.amount)), 0)
-})
-
-const balance = computed((): number => {
-  return totalIncome.value - totalExpenses.value
-})
-
-// Format date for display
 const formatDate = (dateString: string): string => {
   const date = new Date(dateString)
   return date.toLocaleDateString('id-ID')
 }
 
 onMounted(() => {
-  loadTransactions()
-  loadCategories()
-  loadWallets()
+  transactionStore.loadTransactions()
+  categoryStore.loadCategories()
+  walletStore.loadWallets()
 })
 </script>
 
@@ -246,22 +27,32 @@ onMounted(() => {
     <main class="flex flex-col gap-8">
       <!-- Notifications -->
       <div
-        v-if="errorMessage"
+        v-if="transactionStore.errorMessage"
         class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
       >
-        {{ errorMessage }}
-        <button @click="errorMessage = ''" class="absolute top-0 right-0 px-4 py-3">×</button>
+        {{ transactionStore.errorMessage }}
+        <button
+          @click="transactionStore.errorMessage = ''"
+          class="absolute top-0 right-0 px-4 py-3"
+        >
+          ×
+        </button>
       </div>
       <div
-        v-if="successMessage"
+        v-if="transactionStore.successMessage"
         class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative"
       >
-        {{ successMessage }}
-        <button @click="successMessage = ''" class="absolute top-0 right-0 px-4 py-3">×</button>
+        {{ transactionStore.successMessage }}
+        <button
+          @click="transactionStore.successMessage = ''"
+          class="absolute top-0 right-0 px-4 py-3"
+        >
+          ×
+        </button>
       </div>
 
       <!-- Loading indicator -->
-      <div v-if="isLoading" class="text-center py-4">
+      <div v-if="transactionStore.isLoading" class="text-center py-4">
         <p class="text-gray-600">Memuat data...</p>
       </div>
 
@@ -275,9 +66,9 @@ onMounted(() => {
             <h3 class="text-base text-gray-700 mb-2">Saldo Akhir</h3>
             <p
               class="text-2xl font-semibold"
-              :class="balance >= 0 ? 'text-green-600' : 'text-red-600'"
+              :class="transactionStore.balance >= 0 ? 'text-green-600' : 'text-red-600'"
             >
-              Rp {{ balance.toLocaleString('id-ID') }}
+              Rp {{ transactionStore.balance.toLocaleString('id-ID') }}
             </p>
           </div>
 
@@ -285,7 +76,7 @@ onMounted(() => {
           <div class="border border-gray-300 rounded-lg p-4 bg-white shadow-sm">
             <h3 class="text-base text-gray-700 mb-2">Total Pemasukan</h3>
             <p class="text-2xl font-semibold text-green-600">
-              Rp {{ totalIncome.toLocaleString('id-ID') }}
+              Rp {{ transactionStore.totalIncome.toLocaleString('id-ID') }}
             </p>
           </div>
 
@@ -293,16 +84,16 @@ onMounted(() => {
           <div class="border border-gray-300 rounded-lg p-4 bg-white shadow-sm">
             <h3 class="text-base text-gray-700 mb-2">Total Pengeluaran</h3>
             <p class="text-2xl font-semibold text-red-600">
-              Rp {{ totalExpenses.toLocaleString('id-ID') }}
+              Rp {{ transactionStore.totalExpenses.toLocaleString('id-ID') }}
             </p>
           </div>
         </div>
       </section>
 
-      <!-- Add Form -->
+      <!-- New Transaction Form -->
       <section class="border border-gray-300 rounded-lg p-6 shadow-sm">
         <h2 class="text-xl font-bold mb-4 text-gray-800">Tambah Transaksi</h2>
-        <form class="flex flex-col gap-6" @submit.prevent="addTransaction">
+        <form class="flex flex-col gap-6" @submit.prevent="transactionStore.addTransaction()">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="space-y-4">
               <div class="flex flex-col gap-1">
@@ -310,7 +101,7 @@ onMounted(() => {
                 <input
                   type="date"
                   id="date"
-                  v-model="newTransaction.date"
+                  v-model="transactionStore.newTransaction.date"
                   class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
                 />
@@ -321,7 +112,7 @@ onMounted(() => {
                   type="number"
                   id="amount"
                   placeholder="Masukkan jumlah"
-                  v-model="newTransaction.amount"
+                  v-model="transactionStore.newTransaction.amount"
                   class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
                 />
@@ -330,7 +121,7 @@ onMounted(() => {
                 <label for="type" class="font-medium text-gray-700">Jenis Transaksi</label>
                 <select
                   id="type"
-                  v-model="newTransaction.type"
+                  v-model="transactionStore.newTransaction.type"
                   class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
                 >
@@ -347,7 +138,7 @@ onMounted(() => {
                   type="text"
                   id="name"
                   placeholder="Masukkan Nama Transaksi"
-                  v-model="newTransaction.name"
+                  v-model="transactionStore.newTransaction.name"
                   class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
                 />
@@ -356,13 +147,13 @@ onMounted(() => {
                 <label for="category" class="font-medium text-gray-700">Kategori</label>
                 <select
                   id="category"
-                  v-model="newTransaction.category_id"
+                  v-model="transactionStore.newTransaction.category_id"
                   class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
                 >
                   <option value="" disabled selected>Pilih Kategori</option>
                   <option
-                    v-for="category in categories"
+                    v-for="category in categoryStore.categories"
                     :key="category.category_id"
                     :value="category.category_id"
                   >
@@ -374,13 +165,13 @@ onMounted(() => {
                 <label for="wallet" class="font-medium text-gray-700">Metode Pembayaran</label>
                 <select
                   id="wallet"
-                  v-model="newTransaction.wallet_id"
+                  v-model="transactionStore.newTransaction.wallet_id"
                   class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
                 >
                   <option value="" disabled selected>Pilih Metode Pembayaran</option>
                   <option
-                    v-for="wallet in wallets"
+                    v-for="wallet in walletStore.wallets"
                     :key="wallet.wallet_id"
                     :value="wallet.wallet_id"
                   >
@@ -396,16 +187,16 @@ onMounted(() => {
               type="text"
               id="note"
               placeholder="Masukkan Catatan (opsional)"
-              v-model="newTransaction.note"
+              v-model="transactionStore.newTransaction.note"
               class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
           <button
             type="submit"
             class="py-3 px-4 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 transition duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 cursor-pointer"
-            :disabled="isLoading"
+            :disabled="transactionStore.isLoading"
           >
-            {{ isLoading ? 'Menambahkan...' : 'Tambah Transaksi' }}
+            {{ transactionStore.isLoading ? 'Menambahkan...' : 'Tambah Transaksi' }}
           </button>
         </form>
       </section>
@@ -428,11 +219,11 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-if="transactions.length === 0">
+            <tr v-if="!transactionStore.transactions.length">
               <td colspan="9" class="py-4 px-4 text-center text-gray-500">Belum ada transaksi</td>
             </tr>
             <tr
-              v-for="(transaction, index) in transactions"
+              v-for="(transaction, index) in transactionStore.transactions"
               :key="transaction.transaction_id"
               class="border-b hover:bg-gray-50"
             >
@@ -462,13 +253,13 @@ onMounted(() => {
               <td class="py-3 px-4">{{ transaction.note || '-' }}</td>
               <td class="py-3 px-4 flex gap-2">
                 <button
-                  @click="editTransaction(transaction.transaction_id, index)"
+                  @click="transactionStore.editTransaction(transaction.transaction_id, index)"
                   class="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
                 >
                   Edit
                 </button>
                 <button
-                  @click="deleteTransaction(transaction.transaction_id, index)"
+                  @click="transactionStore.deleteTransaction(transaction.transaction_id, index)"
                   class="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
                 >
                   Hapus
